@@ -1,0 +1,7 @@
+domain: pachyderm.io
+repo: github.com/pachyderm/pipeline-controller
+resources:
+- group: pps
+  kind: Pipeline
+  version: v1
+version: "2"
