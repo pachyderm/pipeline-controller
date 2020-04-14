@@ -23,13 +23,27 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type TransformSpec struct {
+	Image string   `json:"image"`
+	Cmd   []string `json:"cmd"`
+}
+
+type PfsSpec struct {
+	Repo string `json:"repo"`
+	Glob string `json:"glob"`
+}
+
+type InputSpec struct {
+	Pfs PfsSpec `json:"pfs"`
+}
+
 // PipelineSpec defines the desired state of Pipeline
 type PipelineSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of Pipeline. Edit Pipeline_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	Transform TransformSpec `json:"transform"`
+	Input     InputSpec     `json:"input"`
 }
 
 // PipelineStatus defines the observed state of Pipeline

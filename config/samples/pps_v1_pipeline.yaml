@@ -3,5 +3,15 @@ kind: Pipeline
 metadata:
   name: pipeline-sample
 spec:
-  # Add fields here
-  foo: bar
+  # pipeline:
+  #  name: wordcount
+  transform:
+    image: wordcount-image
+    cmd:
+    - "/binary"
+    - "/pfs/data"
+    - "/pfs/out"
+  input:
+    pfs:
+      repo: data
+      glob: "/*"
