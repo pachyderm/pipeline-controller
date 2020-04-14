@@ -6,12 +6,11 @@ spec:
   # pipeline:
   #  name: wordcount
   transform:
-    image: wordcount-image
+    image: pachyderm/opencv
     cmd:
-    - "/binary"
-    - "/pfs/data"
-    - "/pfs/out"
+    - "python3"
+    - "/edges.py"
   input:
     pfs:
-      repo: data
+      repo: images
       glob: "/*"

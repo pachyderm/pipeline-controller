@@ -88,8 +88,9 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // the Foo resource that 'owns' it.
 func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 	workerImage := "pachyderm/worker:1.10.1"
+	pachImage := "pachyderm/pachd:1.10.1"
 	//volumeMounts := ""
-	userImage := "pachyderm/worker:1.10.1"
+	userImage := pipeline.Spec.Transform.Image
 
 	//Need to know storage backend (ie GCS Bucket ) +  Secret
 
@@ -101,6 +102,92 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 
 	//Worker Env
 	//TODO Add transform.Env
+
+	userEnvVars := []corev1.EnvVar{{
+		Name:  "STORAGE_BACKEND",
+		Value: "LOCAL",
+	}, {
+		Name:  "PACH_ROOT",
+		Value: "/pach",
+	}, {
+		Name:  "PEER_PORT",
+		Value: "653",
+	}, {
+		Name:  "PPS_PIPELINE_NAME",
+		Value: "edges",
+	}, {
+		Name:  "PPS_WORKER_GRPC_PORT",
+		Value: "80",
+	}, {
+		Name: "PPS_WORKER_IP",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				APIVersion: "v1",
+				FieldPath:  "status.podIP",
+			},
+		},
+	}, {
+		Name: "PPS_POD_NAME",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				APIVersion: "v1",
+				FieldPath:  "metadata.name",
+			},
+		},
+	}}
+
+	sidecarEnvVars := []corev1.EnvVar{{
+		Name:  "PACH_ROOT",
+		Value: "/pach",
+	}, {
+		Name:  "PACH_NAMESPACE",
+		Value: "default",
+	}, {
+		Name:  "BLOCK_CACHE_BYTES",
+		Value: "64M",
+	}, {
+		Name:  "PFS_CACHE_SIZE",
+		Value: "16",
+	}, {
+		Name:  "STORAGE_BACKEND",
+		Value: "Local",
+	}, {
+		Name:  "PPS_WOKER_GRPC_PORT",
+		Value: "80",
+	}, {
+		Name:  "PORT",
+		Value: "650",
+	}, {
+		Name:  "HTTP_PORT",
+		Value: "652",
+	}, {
+		Name:  "PEER_PORT",
+		Value: "653",
+	}}
+
+	initVolumeMounts := []corev1.VolumeMount{{
+		Name:      "pach-bin",
+		MountPath: "/pach-bin",
+	}, {
+		Name:      "pachyderm-worker",
+		MountPath: "/pfs",
+	}}
+
+	storageVolumeMounts := []corev1.VolumeMount{{
+		Name:      "pach-disk",
+		MountPath: "/pach",
+	}} //Missing storage secret
+
+	userVolumeMounts := []corev1.VolumeMount{{
+		Name:      "pach-bin",
+		MountPath: "/pach-bin",
+	}, {
+		Name:      "pachyderm-worker",
+		MountPath: "/pfs",
+	}, {
+		Name:      "pach-disk",
+		MountPath: "/pach",
+	}} //Missing storage secret and docker
 
 	labels := map[string]string{
 		"app":        "pachd",
@@ -126,11 +213,12 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						{
-							Name:    "init",
-							Image:   workerImage,
-							Command: []string{"/app/init"},
+							Name:  "init",
+							Image: workerImage,
+							//Command: []string{"/app/init"},
+							Command: []string{"/pach/worker.sh"},
 							//ImagePullPolicy: corev1.PullPolicy(pullPolicy),
-							//VolumeMounts: volumeMounts, //options.volumeMounts,
+							VolumeMounts: initVolumeMounts, //options.volumeMounts,
 							/*Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU:    cpuZeroQuantity,
@@ -145,25 +233,23 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 							Image:   userImage, //options.userImage,
 							Command: []string{"/pach-bin/worker"},
 							//ImagePullPolicy: v1.PullPolicy(pullPolicy),
-							/*Env: []v1.EnvVar{{
-								Name:  client.PPSPipelineNameEnv,
-								Value: pipelineInfo.Pipeline.Name,
-							}},*/
+							Env: userEnvVars,
 							/*Resources: v1.ResourceRequirements{
 								Requests: v1.ResourceList{
 									v1.ResourceCPU:    cpuZeroQuantity,
 									v1.ResourceMemory: memDefaultQuantity,
 								},
 							},*/
-							//VolumeMounts: userVolumeMounts,
+							VolumeMounts: userVolumeMounts,
 						},
 						{
-							Name:    "storage",   //client.PPSWorkerSidecarContainerName,
-							Image:   workerImage, //a.workerSidecarImage,
-							Command: []string{"/app/pachd", "--mode", "sidecar"},
+							Name:  "storage", //client.PPSWorkerSidecarContainerName,
+							Image: pachImage, //a.workerSidecarImage,
+							//Command: []string{"/app/pachd", "--mode", "sidecar"},
+							Command: []string{"/pachd", "--mode", "sidecar"},
 							//ImagePullPolicy: v1.PullPolicy(pullPolicy),
-							//Env:          sidecarEnv,
-							//VolumeMounts: sidecarVolumeMounts,
+							Env:          sidecarEnvVars,
+							VolumeMounts: storageVolumeMounts,
 							/*Resources: v1.ResourceRequirements{
 								Requests: v1.ResourceList{
 									v1.ResourceCPU:    cpuZeroQuantity,
@@ -173,9 +259,26 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 							//Ports: sidecarPorts,
 						},
 					},
-					//ServiceAccountName: assets.WorkerSAName,
-					RestartPolicy: "Always",
-					//Volumes:            options.volumes,
+					ServiceAccountName: "pachyderm-worker",
+					//RestartPolicy: "Always",
+					Volumes: []corev1.Volume{{
+						Name: "pach-disk",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: "/var/pachyderm/pachd",
+							},
+						},
+					}, {
+						Name: "pachyderm-worker",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					}, {
+						Name: "pach-bin",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					}},
 					//ImagePullSecrets:              options.imagePullSecrets,
 					//TerminationGracePeriodSeconds: &zeroVal,
 					//SecurityContext:               securityContext,
