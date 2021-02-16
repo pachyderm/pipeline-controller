@@ -23,6 +23,7 @@ import (
 	ppsv1 "github.com/pachyderm/pipeline-controller/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -87,8 +88,8 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // the appropriate OwnerReferences on the resource so handleObject can discover
 // the Foo resource that 'owns' it.
 func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
-	workerImage := "pachyderm/worker:1.10.1"
-	pachImage := "pachyderm/pachd:1.10.1"
+	workerImage := "pachyderm/worker:local"
+	pachImage := "pachyderm/pachd:local"
 	//volumeMounts := ""
 	userImage := pipeline.Spec.Transform.Image
 
@@ -134,7 +135,11 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 				FieldPath:  "metadata.name",
 			},
 		},
-	}}
+	}, {
+		Name:  "PPS_SPEC_COMMIT",
+		Value: "a3b50ac9a92045ca96da080927654464",
+	},
+	}
 
 	sidecarEnvVars := []corev1.EnvVar{{
 		Name:  "PACH_ROOT",
@@ -163,7 +168,16 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 	}, {
 		Name:  "PEER_PORT",
 		Value: "653",
-	}}
+	}, {
+		Name: "PACHD_POD_NAME",
+		ValueFrom: &v1.EnvVarSource{
+			FieldRef: &v1.ObjectFieldSelector{
+				APIVersion: "v1",
+				FieldPath:  "metadata.name",
+			},
+		},
+	},
+	}
 
 	initVolumeMounts := []corev1.VolumeMount{{
 		Name:      "pach-bin",
@@ -213,10 +227,10 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						{
-							Name:  "init",
-							Image: workerImage,
-							//Command: []string{"/app/init"},
-							Command: []string{"/pach/worker.sh"},
+							Name:    "init",
+							Image:   workerImage,
+							Command: []string{"/app/init"},
+							//Command: []string{"/pach/worker.sh"},
 							//ImagePullPolicy: corev1.PullPolicy(pullPolicy),
 							VolumeMounts: initVolumeMounts, //options.volumeMounts,
 							/*Resources: corev1.ResourceRequirements{
