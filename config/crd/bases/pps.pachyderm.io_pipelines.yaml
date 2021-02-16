@@ -8,6 +8,10 @@ metadata:
   creationTimestamp: null
   name: pipelines.pps.pachyderm.io
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.state
+    name: State
+    type: string
   group: pps.pachyderm.io
   names:
     kind: Pipeline
@@ -15,6 +19,8 @@ spec:
     plural: pipelines
     singular: pipeline
   scope: Namespaced
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       description: Pipeline is the Schema for the pipelines API
@@ -67,6 +73,14 @@ spec:
           type: object
         status:
           description: PipelineStatus defines the observed state of Pipeline
+          properties:
+            state:
+              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                of cluster Important: Run "make" to regenerate code after modifying
+                this file'
+              type: string
+          required:
+          - state
           type: object
       type: object
   version: v1

@@ -71,6 +71,14 @@ func (r *PipelineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+
+		pipeline.Status.State = "Running"
+
+		if err := r.Status().Update(ctx, &pipeline); err != nil {
+			log.Error(err, "unable to update Pipeline status")
+			return ctrl.Result{}, err
+		}
+
 	} else if err != nil {
 		return ctrl.Result{}, err
 	}
