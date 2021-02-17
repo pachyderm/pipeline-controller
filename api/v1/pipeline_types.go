@@ -41,9 +41,9 @@ type InputSpec struct {
 type PipelineSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	Transform TransformSpec `json:"transform"`
-	Input     InputSpec     `json:"input"`
+	SpecCommitId string        `json:"specCommitId"`
+	Transform    TransformSpec `json:"transform"`
+	Input        InputSpec     `json:"input"`
 }
 
 // PipelineStatus defines the observed state of Pipeline

@@ -3,6 +3,7 @@ kind: Pipeline
 metadata:
   name: pipeline-sample
 spec:
+  specCommitId: ""
   # pipeline:
   #  name: wordcount
   transform:

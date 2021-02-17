@@ -55,6 +55,10 @@ spec:
               required:
               - pfs
               type: object
+            specCommitId:
+              description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+                Important: Run "make" to regenerate code after modifying this file'
+              type: string
             transform:
               properties:
                 cmd:
@@ -69,6 +73,7 @@ spec:
               type: object
           required:
           - input
+          - specCommitId
           - transform
           type: object
         status:

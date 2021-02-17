@@ -145,7 +145,7 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 		},
 	}, {
 		Name:  "PPS_SPEC_COMMIT",
-		Value: "a3b50ac9a92045ca96da080927654464",
+		Value: pipeline.Spec.SpecCommitId,
 	},
 	}
 
