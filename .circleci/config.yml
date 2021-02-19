@@ -1,13 +1,116 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine. See: https://circleci.com/docs/2.0/configuration-reference
 version: 2.1
-# Use a package of configuration called an orb.
+
+executors:
+  node-docker:
+    docker:
+      - image: cimg/node:15.8.0
+
 orbs:
-  # Declare a dependency on the welcome-orb
-  welcome: circleci/welcome-orb@0.4.1
-# Orchestrate or schedule a set of jobs
+  gcp-cli: circleci/gcp-cli@1.8.5
+  sk: wob-adarga/secret-key-orb@1.0.0
+
+jobs:
+  build-pipeline-controller:
+    executor: node-docker
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Run tests
+          command: |
+            docker build --target test -f Dockerfile .
+
+      - run:
+          name: Build and deploy docker image
+          command: |
+            docker build \
+              --build-arg PROJECT=${CIRCLE_PROJECT_REPONAME} \
+              --build-arg VERSION=${CIRCLE_TAG/deploy-/''} \
+              --build-arg CREATED=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+              --build-arg GIT_COMMIT=${CIRCLE_SHA1:0:7} \
+              --build-arg CIRCLE_REPOSITORY_URL \
+              --build-arg CIRCLE_BUILD_URL \
+              -t controller -f Dockerfile .
+      - run:
+          name: Save docker image
+          command: |
+            docker save controller > controller.tgz
+
+      - persist_to_workspace:
+          root: .
+          paths:
+            - "controller.tgz"
+  semrel:
+    executor: node-docker
+    steps:
+    - checkout
+    - sk/setup-git-keys:
+        ssh-key: $CERTIFIED_SSH_KEY
+        ssh-cert: $CERTIFIED_SSH_CERT
+        gpg-key: $BUILD_SERVICES_GPG_KEY
+    - run:
+        name: Install semantic-release dependencies
+        command: |
+          npm --prefix .semantic-release run installInParent
+    - run:
+        name: Run semantic-release (pushes image)
+        command: npx semantic-release
+  release:
+    executor: node-docker
+    steps:
+    - attach_workspace:
+         at: /tmp/workspace
+    - run:
+        name: gcloud auth configure-docker
+        command: gcloud auth configure-docker
+    - gcp-cli/install
+    - gcp-cli/initialize
+    - setup_remote_docker
+    - run:
+        name: push docker images
+        command: |
+          TAG=${CIRCLE_TAG/deploy-/''}
+          docker load -i /tmp/workspace/controller.tgz
+          docker tag $img $ADARGA_DOCKER_REGISTRY/${CIRCLE_PROJECT_REPONAME}:$TAG
+          docker push $ADARGA_DOCKER_REGISTRY/${CIRCLE_PROJECT_REPONAME}:$TAG
+
 workflows:
-  # Name the workflow "welcome"
-  welcome:
-    # Run the welcome/run job in its own container
+  version: 2
+  branch_build_test:
     jobs:
-      - welcome/run
+      - build-pipeline-controller:
+          context: adarga-global
+          filters:
+            tags:
+              ignore: /.*/
+            branches:
+              ignore: "main"
+  semantic_release_tag:
+    jobs:
+      - semrel:
+          context:
+            - adarga-global
+            - github-cd
+          filters:
+            tags:
+              ignore: /.*/
+            branches:
+              only: "main"
+  release:
+    jobs:
+      - build-pipeline-controller:
+          context: adarga-global
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /.*/
+      - release:
+          context: adarga-global
+          requires:
+            - build-pipeline-controller
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /.*/
