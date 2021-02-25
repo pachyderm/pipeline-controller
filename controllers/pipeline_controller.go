@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	ppsv1 "github.com/pachyderm/pipeline-controller/api/v1"
@@ -86,9 +87,34 @@ func (r *PipelineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
+var (
+	jobOwnerKey = ".metadata.controller"
+	apiGVStr    = ppsv1.GroupVersion.String()
+)
+
 func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	if err := mgr.GetFieldIndexer().IndexField(&appsv1.Deployment{}, jobOwnerKey, func(rawObj runtime.Object) []string {
+		// grab the job object, extract the owner...
+		deployment := rawObj.(*appsv1.Deployment)
+		owner := metav1.GetControllerOf(deployment)
+		if owner == nil {
+			return nil
+		}
+		// ...make sure it's a CronJob...
+		if owner.APIVersion != apiGVStr || owner.Kind != "Pipeline" {
+			return nil
+		}
+
+		// ...and if so, return it
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ppsv1.Pipeline{}).
+		Owns(&appsv1.Deployment{}).
 		Complete(r)
 }
 
@@ -123,7 +149,7 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 		Value: "653",
 	}, {
 		Name:  "PPS_PIPELINE_NAME",
-		Value: "edges",
+		Value: pipeline.GetObjectMeta().GetName(),
 	}, {
 		Name:  "PPS_WORKER_GRPC_PORT",
 		Value: "80",
@@ -217,7 +243,7 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 	}
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pipeline.Name,
+			Name:      fmt.Sprintf("pipeline-%s-v1", pipeline.Name),
 			Namespace: pipeline.Namespace,
 			/*OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(pipeline, ppsv1.SchemeGroupVersion.WithKind("Pipeline")),
@@ -254,6 +280,18 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 							Name:    "user",    //client.PPSWorkerUserContainerName,
 							Image:   userImage, //options.userImage,
 							Command: []string{"/pach-bin/worker"},
+							/*
+								Command: []string{"/pach-bin/dlv"},
+								Args: []string{
+									"exec", "/pach-bin/worker",
+									"--listen=:2345",
+									"--headless=true",
+									//"--log=true",
+									//"--log-output=debugger,debuglineerr,gdbwire,lldbout,rpc",
+									"--accept-multiclient",
+									"--api-version=2",
+								},
+							*/
 							//ImagePullPolicy: v1.PullPolicy(pullPolicy),
 							Env: userEnvVars,
 							/*Resources: v1.ResourceRequirements{
