@@ -1,11 +1,9 @@
 apiVersion: pps.pachyderm.io/v1
 kind: Pipeline
 metadata:
-  name: pipeline-sample
+  name: edges
 spec:
-  specCommitId: ""
-  # pipeline:
-  #  name: wordcount
+  description: "A pipeline that performs image edge detection by using the OpenCV library."
   transform:
     image: pachyderm/opencv
     cmd:

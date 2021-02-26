@@ -21,6 +21,8 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	pclient "github.com/pachyderm/pachyderm/v2/src/client"
+	"github.com/pachyderm/pachyderm/v2/src/pps"
 	ppsv1 "github.com/pachyderm/pipeline-controller/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,18 +39,17 @@ import (
 // PipelineReconciler reconciles a Pipeline object
 type PipelineReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log        logr.Logger
+	Scheme     *runtime.Scheme
+	PachClient *pclient.APIClient
 }
 
 // +kubebuilder:rbac:groups=pps.pachyderm.io,resources=pipelines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=pps.pachyderm.io,resources=pipelines/status,verbs=get;update;patch
-
 func (r *PipelineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("pipeline", req.NamespacedName)
 
-	// your logic here
 	var pipeline ppsv1.Pipeline
 	if err := r.Get(ctx, req.NamespacedName, &pipeline); err != nil {
 		//log.Info(err, "unable to fetch Pipeline")
@@ -58,9 +59,14 @@ func (r *PipelineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	pipelineDeployment := newDeployment(&pipeline)
-	err := r.Get(ctx, types.NamespacedName{Name: pipelineDeployment.Name, Namespace: req.NamespacedName.Namespace}, &appsv1.Deployment{})
+	err := r.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("pipeline-%s-v1", pipeline.Name), Namespace: req.NamespacedName.Namespace}, &appsv1.Deployment{})
 	if err != nil && errors.IsNotFound(err) {
+
+		err, specCommitID := newPachPipeline(&pipeline, r.PachClient)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		pipelineDeployment := newDeployment(&pipeline, specCommitID)
 
 		if err := controllerutil.SetControllerReference(&pipeline, pipelineDeployment, r.Scheme); err != nil {
 			return ctrl.Result{}, err
@@ -118,10 +124,30 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+//Returns spec commit ID of new pipeline
+func newPachPipeline(pipeline *ppsv1.Pipeline, c *pclient.APIClient) (error, string) {
+	commit, err := c.CreatePipelineAndReturn(
+		pipeline.Name,
+		pipeline.Spec.Transform.Image,
+		pipeline.Spec.Transform.Cmd,
+		[]string{},
+		&pps.ParallelismSpec{
+			Constant: 1,
+		},
+		pclient.NewPFSInput(pipeline.Spec.Input.Pfs.Repo, pipeline.Spec.Input.Pfs.Glob),
+		"",
+		false,
+	)
+	if err != nil {
+		return err, ""
+	}
+	return nil, commit.ID
+}
+
 // newDeployment creates a new Deployment for a Foo resource. It also sets
 // the appropriate OwnerReferences on the resource so handleObject can discover
 // the Foo resource that 'owns' it.
-func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
+func newDeployment(pipeline *ppsv1.Pipeline, specCommitID string) *appsv1.Deployment {
 	workerImage := "pachyderm/worker:local"
 	pachImage := "pachyderm/pachd:local"
 	//volumeMounts := ""
@@ -171,7 +197,7 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 		},
 	}, {
 		Name:  "PPS_SPEC_COMMIT",
-		Value: pipeline.Spec.SpecCommitId,
+		Value: specCommitID,
 	},
 	}
 
@@ -243,7 +269,7 @@ func newDeployment(pipeline *ppsv1.Pipeline) *appsv1.Deployment {
 	}
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("pipeline-%s-v1", pipeline.Name),
+			Name:      fmt.Sprintf("pipeline-%s-v1", pipeline.Name), //TODO Dry up with reconcile loop Deployment name
 			Namespace: pipeline.Namespace,
 			/*OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(pipeline, ppsv1.SchemeGroupVersion.WithKind("Pipeline")),

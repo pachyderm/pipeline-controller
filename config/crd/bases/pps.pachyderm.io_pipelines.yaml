@@ -9,8 +9,17 @@ metadata:
   name: pipelines.pps.pachyderm.io
 spec:
   additionalPrinterColumns:
+  - JSONPath: .spec.input.pfs.repo
+    name: Input
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Created
+    type: string
   - JSONPath: .status.state
     name: State
+    type: string
+  - JSONPath: .spec.description
+    name: Description
     type: string
   group: pps.pachyderm.io
   names:
@@ -23,7 +32,8 @@ spec:
     status: {}
   validation:
     openAPIV3Schema:
-      description: Pipeline is the Schema for the pipelines API
+      description: 'Pach pipeline printer columns: NAME VERSION INPUT CREATED STATE
+        / LAST JOB DESCRIPTION Pipeline is the Schema for the pipelines API'
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -40,6 +50,10 @@ spec:
         spec:
           description: PipelineSpec defines the desired state of Pipeline
           properties:
+            description:
+              description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+                Important: Run "make" to regenerate code after modifying this file'
+              type: string
             input:
               properties:
                 pfs:
@@ -55,10 +69,6 @@ spec:
               required:
               - pfs
               type: object
-            specCommitId:
-              description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-                Important: Run "make" to regenerate code after modifying this file'
-              type: string
             transform:
               properties:
                 cmd:
@@ -72,8 +82,8 @@ spec:
               - image
               type: object
           required:
+          - description
           - input
-          - specCommitId
           - transform
           type: object
         status:

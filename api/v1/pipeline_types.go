@@ -41,9 +41,9 @@ type InputSpec struct {
 type PipelineSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	SpecCommitId string        `json:"specCommitId"`
-	Transform    TransformSpec `json:"transform"`
-	Input        InputSpec     `json:"input"`
+	Description string        `json:"description"`
+	Transform   TransformSpec `json:"transform"`
+	Input       InputSpec     `json:"input"`
 }
 
 // PipelineStatus defines the observed state of Pipeline
@@ -53,8 +53,12 @@ type PipelineStatus struct {
 	State string `json:"state"`
 }
 
+//Pach pipeline printer columns: NAME VERSION INPUT CREATED STATE / LAST JOB DESCRIPTION
 // +kubebuilder:object:root=true
+// +kubebuilder:printcolumn:name="Input",type=string,JSONPath=`.spec.input.pfs.repo`
+// +kubebuilder:printcolumn:name="Created",type=string,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
+// +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 // +kubebuilder:subresource:status
 // Pipeline is the Schema for the pipelines API
 type Pipeline struct {

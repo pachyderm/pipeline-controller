@@ -28,6 +28,7 @@ import (
 
 	ppsv1 "github.com/pachyderm/pipeline-controller/api/v1"
 	"github.com/pachyderm/pipeline-controller/controllers"
+	pclient "github.com/pachyderm/pipeline-controller/pachclient"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -65,11 +66,17 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+	pachClient, err := pclient.Connect()
+	if err != nil {
+		setupLog.Error(err, "unable to connect to Pachd")
+		os.Exit(1)
+	}
 
 	if err = (&controllers.PipelineReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Pipeline"),
-		Scheme: mgr.GetScheme(),
+		Client:     mgr.GetClient(),
+		Log:        ctrl.Log.WithName("controllers").WithName("Pipeline"),
+		Scheme:     mgr.GetScheme(),
+		PachClient: pachClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pipeline")
 		os.Exit(1)
